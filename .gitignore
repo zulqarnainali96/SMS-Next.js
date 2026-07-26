@@ -1,0 +1,22 @@
+# Dependency directories.
+node_modules/
+
+# Local development dependencies, not needed in Dockerfile (if applicable).
+/.next/
+/out/
+
+# Editor/IntelliJ IDEA files except for settings globally used across all projects and/or IDEs as we don't want to remove them permanently yet.
+/.idea/
+.vscode/
+*.sublime-project
+
+# TypeScript cache.
+/**/src/types.d.ts
+**/*.tsbuildinfo
+
+# Next.js build output, when running `npm run build` or Gatsby's local environment. (https://nextjs.org/docs/api-reference/build-system/introdutory-typescript)
+.build/
+
+# Production node modules that are included in the package.json of files.
+.next/
+docs/packages/.gitignore
