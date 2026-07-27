@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { ClipboardCheck } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Search, Calendar } from 'lucide-react';
 
 export default function AttendancePage() {
   const [students, setStudents] = useState([]);
@@ -10,19 +10,17 @@ export default function AttendancePage() {
   const [message, setMessage] = useState({ text: '', type: 'success' });
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const [form, setForm] = useState({
-    student_id: '',
-    attendance_date: todayStr,
-    status: 'Present',
-    note: '',
-  });
+  const [selectedClass, setSelectedClass] = useState('Class 9');
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const [studentRes, attendanceRes] = await Promise.all([
         fetch('/api/students'),
-        fetch('/api/attendance'),
+        fetch(`/api/attendance?date=${selectedDate}`),
       ]);
       const studentJson = await studentRes.json();
       const attendanceJson = await attendanceRes.json();
@@ -38,7 +36,7 @@ export default function AttendancePage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [selectedDate]);
 
   const showMessage = (text, type = 'success') => {
     setMessage({ text, type });
@@ -47,131 +45,218 @@ export default function AttendancePage() {
     }, 3200);
   };
 
-  const handleSaveAttendance = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await fetch('/api/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const json = await res.json();
-      if (json.ok) {
-        setAttendance(json.data);
-        setForm((prev) => ({ ...prev, note: '' }));
-        showMessage('Attendance saved successfully.');
-      } else {
-        showMessage(json.error, 'error');
+  const classOptions = useMemo(() => {
+    const classSet = new Set(students.map((s) => s.class_name));
+    return Array.from(classSet).sort((a, b) => {
+      const aNum = parseInt(a.match(/\d+/)?.[0] || '0');
+      const bNum = parseInt(b.match(/\d+/)?.[0] || '0');
+      return aNum - bNum;
+    });
+  }, [students]);
+
+  const filteredStudents = useMemo(() => {
+    return students.filter((s) => {
+      const matchesClass = s.class_name === selectedClass;
+      const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesClass && matchesSearch;
+    });
+  }, [students, selectedClass, searchQuery]);
+
+  const getAttendanceStatus = (studentId) => {
+    const record = attendance.find(
+      (r) => r.student_id === studentId && r.attendance_date === selectedDate
+    );
+    return record?.status || null;
+  };
+
+  const stats = useMemo(() => {
+    const total = filteredStudents.length;
+    const present = filteredStudents.filter((s) => getAttendanceStatus(s.id) === 'Present').length;
+    const absent = filteredStudents.filter((s) => getAttendanceStatus(s.id) === 'Absent').length;
+    const leave = filteredStudents.filter((s) => getAttendanceStatus(s.id) === 'Late').length;
+    return { total, present, absent, leave };
+  }, [filteredStudents, attendance, selectedDate]);
+
+  const handleStatusToggle = (studentId, status) => {
+    setAttendance((prev) => {
+      const existing = prev.find(
+        (r) => r.student_id === studentId && r.attendance_date === selectedDate
+      );
+      if (existing) {
+        if (existing.status === status) {
+          return prev.filter((r) => !(r.student_id === studentId && r.attendance_date === selectedDate));
+        }
+        return prev.map((r) =>
+          r.student_id === studentId && r.attendance_date === selectedDate
+            ? { ...r, status }
+            : r
+        );
       }
+      return [
+        ...prev,
+        {
+          id: Date.now() + Math.random(),
+          student_id: studentId,
+          attendance_date: selectedDate,
+          status,
+          note: '',
+        },
+      ];
+    });
+  };
+
+  const handleSaveAll = async () => {
+    setSaving(true);
+    try {
+      const promises = attendance
+        .filter((r) => r.attendance_date === selectedDate)
+        .map((record) =>
+          fetch('/api/attendance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(record),
+          })
+        );
+      await Promise.all(promises);
+      showMessage('Attendance saved successfully.');
     } catch (err) {
       showMessage(err.message, 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const todayRecords = attendance.filter((r) => r.attendance_date === todayStr);
+  const getInitials = (name = '') =>
+    name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0].toUpperCase())
+      .join('');
 
   return (
-    <section className="view split-view">
-      {message.text && <p className={`message ${message.type}`} style={{ gridColumn: '1 / -1' }}>{message.text}</p>}
+    <section className="attendance-page">
+      {message.text && <p className={`message ${message.type}`}>{message.text}</p>}
 
-      <form className="form-panel" onSubmit={handleSaveAttendance}>
-        <h2>Mark Attendance</h2>
-        <label>
-          Student
+      <div className="attendance-toolbar">
+        <div className="toolbar-left">
           <select
-            value={form.student_id}
-            onChange={(e) => setForm({ ...form, student_id: e.target.value })}
-            required
+            className="class-select"
+            value={selectedClass}
+            onChange={(e) => setSelectedClass(e.target.value)}
           >
-            <option value="" disabled>
-              Select student
-            </option>
-            {students.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} · {s.roll_number} ({s.class_name})
+            {classOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
               </option>
             ))}
           </select>
-        </label>
-        <label>
-          Date
-          <input
-            type="date"
-            value={form.attendance_date}
-            onChange={(e) => setForm({ ...form, attendance_date: e.target.value })}
-            required
-          />
-        </label>
-        <label>
-          Status
-          <select
-            value={form.status}
-            onChange={(e) => setForm({ ...form, status: e.target.value })}
-            required
-          >
-            <option>Present</option>
-            <option>Absent</option>
-            <option>Late</option>
-          </select>
-        </label>
-        <label>
-          Note
-          <input
-            value={form.note}
-            onChange={(e) => setForm({ ...form, note: e.target.value })}
-            placeholder="Optional note"
-          />
-        </label>
-        <button type="submit">
-          <ClipboardCheck size={17} />
-          <span>Save Attendance</span>
-        </button>
-      </form>
 
-      <section className="table-panel">
-        <div className="panel-heading">
-          <h2>Today's Attendance</h2>
-          <span>{todayRecords.length} records</span>
+          <div className="date-picker">
+            <Calendar size={16} />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
+
+          <div className="search-box">
+            <Search size={16} />
+            <input
+              type="text"
+              placeholder="Student ka naam search karein"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Student</th>
-              <th>Class</th>
-              <th>Status</th>
-              <th>Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={5} className="empty-table-cell">
-                  Loading attendance records...
-                </td>
-              </tr>
-            ) : todayRecords.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="empty-table-cell">
-                  No attendance marked for today yet.
-                </td>
-              </tr>
-            ) : (
-              todayRecords.map((record) => (
-                <tr key={record.id}>
-                  <td>{record.attendance_date}</td>
-                  <td>{record.student_name}</td>
-                  <td>{record.class_name}</td>
-                  <td>
-                    <span className="status-pill">{record.status}</span>
-                  </td>
-                  <td>{record.note || '—'}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+
+        <div className="toolbar-right">
+          <button className="more-button" type="button">
+            •••
+          </button>
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <div className="stat-card total-card">
+          <div className="stat-label">Total students</div>
+          <div className="stat-value">{stats.total}</div>
+        </div>
+        <div className="stat-card present-card">
+          <div className="stat-label">Present</div>
+          <div className="stat-value">{stats.present}</div>
+        </div>
+        <div className="stat-card absent-card">
+          <div className="stat-label">Absent</div>
+          <div className="stat-value">{stats.absent}</div>
+        </div>
+        <div className="stat-card leave-card">
+          <div className="stat-label">Leave</div>
+          <div className="stat-value">{stats.leave}</div>
+        </div>
+      </div>
+
+      <section className="attendance-table-panel">
+        <div className="attendance-table-header">
+          <span>Roll</span>
+          <span>Student</span>
+          <span>Status</span>
+        </div>
+
+        {loading ? (
+          <div className="empty-table-cell">Loading student records...</div>
+        ) : filteredStudents.length === 0 ? (
+          <div className="empty-table-cell">No students found.</div>
+        ) : (
+          filteredStudents.map((student) => {
+            const status = getAttendanceStatus(student.id);
+            return (
+              <div key={student.id} className="attendance-row">
+                <span className="roll-cell">{student.roll_number}</span>
+                <div className="student-cell">
+                  <div className="student-avatar">{getInitials(student.name)}</div>
+                  <span className="student-name">{student.name}</span>
+                </div>
+                <div className="status-buttons">
+                  <button
+                    type="button"
+                    className={`status-btn present ${status === 'Present' ? 'active' : ''}`}
+                    onClick={() => handleStatusToggle(student.id, 'Present')}
+                  >
+                    P
+                  </button>
+                  <button
+                    type="button"
+                    className={`status-btn absent ${status === 'Absent' ? 'active' : ''}`}
+                    onClick={() => handleStatusToggle(student.id, 'Absent')}
+                  >
+                    A
+                  </button>
+                  <button
+                    type="button"
+                    className={`status-btn leave ${status === 'Late' ? 'active' : ''}`}
+                    onClick={() => handleStatusToggle(student.id, 'Late')}
+                  >
+                    L
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </section>
+
+      <button
+        className="save-attendance-button"
+        type="button"
+        onClick={handleSaveAll}
+        disabled={saving}
+      >
+        <span className="save-icon">💾</span>
+        <span>{saving ? 'Saving...' : 'Save attendance'}</span>
+      </button>
     </section>
   );
 }

@@ -1,6 +1,6 @@
 # Dependency directories.
 node_modules/
-
+package-lock.json
 # Local development dependencies, not needed in Dockerfile (if applicable).
 /.next/
 /out/
