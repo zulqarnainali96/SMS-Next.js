@@ -65,6 +65,17 @@ export function AuthProvider({ children }) {
     return json;
   }, [fetchProfile, router]);
 
+  const register = useCallback(async (payload) => {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Registration failed');
+    return json;
+  }, []);
+
   const logout = useCallback(async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     setUser(null);
@@ -72,8 +83,8 @@ export function AuthProvider({ children }) {
   }, [router]);
 
   const value = useMemo(
-    () => ({ user, loading, login, logout, refreshProfile: fetchProfile }),
-    [user, loading, login, logout, fetchProfile]
+    () => ({ user, loading, login, register, logout, refreshProfile: fetchProfile }),
+    [user, loading, login, register, logout, fetchProfile]
   );
 
   if (loading && !PUBLIC_PATHS.includes(pathname)) {

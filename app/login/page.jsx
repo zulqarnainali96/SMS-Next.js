@@ -2,14 +2,23 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { GraduationCap, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, Loader2, UserPlus, LogIn } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login } = useAuth();
-  const [form, setForm] = useState({ username: '', password: '' });
+  const { login, register } = useAuth();
+  const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [form, setForm] = useState({
+    username: '',
+    email: '',
+    password: '',
+    first_name: '',
+    last_name: '',
+    role: 'student',
+    phone: '',
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -17,12 +26,34 @@ export default function LoginPage() {
     setError('');
 
     try {
-      await login(form.username, form.password);
+      if (mode === 'login') {
+        await login(form.username, form.password);
+      } else {
+        const result = await register({
+          username: form.username,
+          email: form.email,
+          password: form.password,
+          first_name: form.first_name,
+          last_name: form.last_name,
+          role: form.role,
+          phone: form.phone,
+        });
+        if (result.ok) {
+          // Auto-login after successful registration
+          await login(form.username, form.password);
+        }
+      }
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleMode = () => {
+    setMode(mode === 'login' ? 'register' : 'login');
+    setError('');
+    setForm({ username: '', email: '', password: '', first_name: '', last_name: '', role: 'student', phone: '' });
   };
 
   return (
@@ -59,12 +90,16 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Right Panel - Login Form */}
+        {/* Right Panel - Form */}
         <div className="login-form-panel">
           <div className="login-form-wrapper">
             <div className="login-form-header">
-              <h2>Welcome back</h2>
-              <p>Sign in to your account to continue</p>
+              <h2>{mode === 'login' ? 'Welcome back' : 'Create account'}</h2>
+              <p>
+                {mode === 'login'
+                  ? 'Sign in to your account to continue'
+                  : 'Register to get started with the system'}
+              </p>
             </div>
 
             {error && (
@@ -79,6 +114,35 @@ export default function LoginPage() {
             )}
 
             <form className="login-form" onSubmit={handleSubmit}>
+              {mode === 'register' && (
+                <div className="login-row">
+                  <div className="login-field">
+                    <label htmlFor="first_name">First Name</label>
+                    <div className="input-wrapper">
+                      <input
+                        id="first_name"
+                        type="text"
+                        value={form.first_name}
+                        onChange={(e) => setForm({ ...form, first_name: e.target.value })}
+                        placeholder="First name"
+                      />
+                    </div>
+                  </div>
+                  <div className="login-field">
+                    <label htmlFor="last_name">Last Name</label>
+                    <div className="input-wrapper">
+                      <input
+                        id="last_name"
+                        type="text"
+                        value={form.last_name}
+                        onChange={(e) => setForm({ ...form, last_name: e.target.value })}
+                        placeholder="Last name"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="login-field">
                 <label htmlFor="username">Username</label>
                 <div className="input-wrapper">
@@ -98,6 +162,27 @@ export default function LoginPage() {
                 </div>
               </div>
 
+              {mode === 'register' && (
+                <div className="login-field">
+                  <label htmlFor="email">Email</label>
+                  <div className="input-wrapper">
+                    <svg className="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                      <polyline points="22,6 12,13 2,6" />
+                    </svg>
+                    <input
+                      id="email"
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      autoComplete="email"
+                      placeholder="Enter your email"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="login-field">
                 <label htmlFor="password">Password</label>
                 <div className="input-wrapper">
@@ -110,8 +195,8 @@ export default function LoginPage() {
                     type={showPassword ? 'text' : 'password'}
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    autoComplete="current-password"
-                    placeholder="Enter your password"
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                    placeholder={mode === 'login' ? 'Enter your password' : 'Create a password'}
                     required
                   />
                   <button
@@ -125,17 +210,64 @@ export default function LoginPage() {
                 </div>
               </div>
 
+              {mode === 'register' && (
+                <div className="login-field">
+                  <label htmlFor="role">Role</label>
+                  <div className="input-wrapper">
+                    <select
+                      id="role"
+                      value={form.role}
+                      onChange={(e) => setForm({ ...form, role: e.target.value })}
+                      className="login-select"
+                    >
+                      <option value="student">Student</option>
+                      <option value="teacher">Teacher</option>
+                      <option value="parent">Parent</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
               <button type="submit" className="login-submit" disabled={loading}>
                 {loading ? (
                   <>
                     <Loader2 size={18} className="spinner" />
-                    <span>Signing in...</span>
+                    <span>{mode === 'login' ? 'Signing in...' : 'Creating account...'}</span>
+                  </>
+                ) : mode === 'login' ? (
+                  <>
+                    <LogIn size={18} />
+                    <span>Sign in</span>
                   </>
                 ) : (
-                  <span>Sign in</span>
+                  <>
+                    <UserPlus size={18} />
+                    <span>Create account</span>
+                  </>
                 )}
               </button>
             </form>
+
+            <div className="login-toggle">
+              <p>
+                {mode === 'login' ? (
+                  <>
+                    Don't have an account?{' '}
+                    <button type="button" className="toggle-link" onClick={toggleMode}>
+                      Sign up
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    Already have an account?{' '}
+                    <button type="button" className="toggle-link" onClick={toggleMode}>
+                      Sign in
+                    </button>
+                  </>
+                )}
+              </p>
+            </div>
 
             <p className="login-footer-text">
               Use your School Management API credentials to sign in.
