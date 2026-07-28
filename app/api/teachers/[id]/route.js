@@ -1,17 +1,13 @@
-import { NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { apiGet } from '@/lib/api-client';
+import { jsonError, jsonOk } from '@/lib/api-helpers';
+import { ENDPOINTS } from '@/lib/endpoints';
+import { mapTeacher } from '@/lib/mappers';
 
-export async function GET(request, { params }) {
+export async function GET(_request, { params }) {
   try {
-    const { id } = params;
-    const teacher = db.getTeacher(id);
-
-    if (!teacher) {
-      return NextResponse.json({ ok: false, error: 'Teacher not found.' }, { status: 404 });
-    }
-
-    return NextResponse.json({ ok: true, data: teacher });
+    const teacher = await apiGet(ENDPOINTS.teachers.detail(params.id));
+    return jsonOk(mapTeacher(teacher));
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    return jsonError(error, error.status || 500);
   }
 }

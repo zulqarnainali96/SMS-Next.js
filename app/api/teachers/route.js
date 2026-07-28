@@ -1,53 +1,48 @@
-import { NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { apiGet, apiPost, fetchAllPages } from '@/lib/api-client';
+import { jsonError, jsonOk, resolveSchoolId } from '@/lib/api-helpers';
+import { ENDPOINTS } from '@/lib/endpoints';
+import { mapTeacher, mapTeacherCreate } from '@/lib/mappers';
+
+async function listTeachers() {
+  const rawTeachers = await fetchAllPages(ENDPOINTS.teachers.list);
+  return rawTeachers.map(mapTeacher);
+}
 
 export async function GET() {
   try {
-    return NextResponse.json({ ok: true, data: db.listTeachers() });
+    return jsonOk(await listTeachers());
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    return jsonError(error, error.status || 500);
   }
 }
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const {
-      employee_id,
-      name,
-      subject,
-      phone,
-      email,
-      address,
-      qualification,
-      experience_years,
-      emergency_contact,
-      joined_date,
-      status,
-    } = body;
+    const { employee_id, name, subject, phone, email, joined_date } = body;
 
-    if (!employee_id || !name || !subject || !phone || !email || !address || !joined_date) {
-      return NextResponse.json(
-        { ok: false, error: 'Employee ID, name, subject, phone, email, address, and joined date are required.' },
-        { status: 400 }
+    if (!employee_id || !name || !subject || !phone || !email || !joined_date) {
+      return jsonError(
+        {
+          message:
+            'Employee ID, name, subject, phone, email, and joined date are required.',
+          status: 400,
+        },
+        400
       );
     }
 
-    const updatedTeachers = db.addTeacher({
-      employee_id: employee_id.trim(),
-      name: name.trim(),
-      subject: subject.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
-      address: address.trim(),
-      qualification: qualification ? qualification.trim() : '',
-      experience_years: Number(experience_years) || 0,
-      emergency_contact: emergency_contact ? emergency_contact.trim() : '',
-      joined_date,
-      status: status || 'Active',
-    });
-    return NextResponse.json({ ok: true, data: updatedTeachers });
+    const schoolId = await resolveSchoolId(apiGet, ENDPOINTS);
+    if (!schoolId) {
+      return jsonError(
+        { message: 'School ID is required. Set DEFAULT_SCHOOL_ID in lib/config.js.', status: 400 },
+        400
+      );
+    }
+
+    await apiPost(ENDPOINTS.teachers.list, mapTeacherCreate(body, schoolId));
+    return jsonOk(await listTeachers(), 201);
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    return jsonError(error, error.status || 500);
   }
 }
